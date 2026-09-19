@@ -4,6 +4,7 @@ import os
 import sqlite3
 from contextlib import closing
 from datetime import datetime, timezone
+from pathlib import Path
 
 import aiohttp
 from aiohttp import web
@@ -17,7 +18,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().with_name(".env"), override=True)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
