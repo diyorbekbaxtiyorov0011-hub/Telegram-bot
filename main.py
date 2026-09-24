@@ -24,8 +24,8 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 DATABASE_PATH = os.getenv("DATABASE_PATH", "bot.db")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-RAW_GEMINI_MODEL = (os.getenv("GEMINI_MODEL") or "gemini-1.5-flash").strip()
-GEMINI_MODEL = RAW_GEMINI_MODEL if RAW_GEMINI_MODEL.startswith("gemini-") else "gemini-1.5-flash"
+RAW_GEMINI_MODEL = (os.getenv("GEMINI_MODEL") or "gemini-3.5-flash").strip()
+GEMINI_MODEL = RAW_GEMINI_MODEL if RAW_GEMINI_MODEL.startswith("gemini-") else "gemini-3.5-flash"
 GEMINI_FALLBACK_MODELS = (GEMINI_MODEL,)
 
 if not BOT_TOKEN:
