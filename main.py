@@ -26,7 +26,15 @@ DATABASE_PATH = os.getenv("DATABASE_PATH", "bot.db")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 RAW_GEMINI_MODEL = (os.getenv("GEMINI_MODEL") or "gemini-3.5-flash").strip()
 GEMINI_MODEL = RAW_GEMINI_MODEL if RAW_GEMINI_MODEL.startswith("gemini-") else "gemini-3.5-flash"
-GEMINI_FALLBACK_MODELS = (GEMINI_MODEL,)
+GEMINI_FALLBACK_MODELS = tuple(
+    dict.fromkeys(
+        [
+            GEMINI_MODEL,
+            "gemini-3.5-flash-lite",
+            "gemini-2.5-flash",
+        ]
+    )
+)
 
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN .env faylida ko'rsatilmagan")
@@ -203,22 +211,36 @@ async def ask_gemini(history: list[dict[str, object]]) -> str:
         },
     }
     timeout = aiohttp.ClientTimeout(total=15)
-    model = GEMINI_FALLBACK_MODELS[0]
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{model}:generateContent?key={GEMINI_API_KEY}"
-    )
+    errors = []
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.post(url, json=payload) as response:
-            response_data = await response.json(content_type=None)
-            if response.status != 200:
-                error = response_data.get("error", {}).get("message", "Noma'lum xato")
-                raise RuntimeError(error)
+        for model in GEMINI_FALLBACK_MODELS:
+            url = (
+                "https://generativelanguage.googleapis.com/v1beta/models/"
+                f"{model}:generateContent?key={GEMINI_API_KEY}"
+            )
+            for attempt in range(2):
+                try:
+                    async with session.post(url, json=payload) as response:
+                        response_data = await response.json(content_type=None)
+                    if response.status == 200:
+                        try:
+                            return response_data["candidates"][0]["content"]["parts"][0]["text"]
+                        except (KeyError, IndexError, TypeError) as error:
+                            errors.append(f"{model}: javob formati xato ({error})")
+                            break
 
-    try:
-        return response_data["candidates"][0]["content"]["parts"][0]["text"]
-    except (KeyError, IndexError, TypeError) as error:
-        raise RuntimeError("Gemini javob qaytarmadi") from error
+                    error = response_data.get("error", {}).get("message", "Noma'lum xato")
+                    errors.append(f"{model}: {error}")
+                    if response.status not in (429, 500, 502, 503, 504):
+                        break
+                    if attempt == 0:
+                        await asyncio.sleep(0.5)
+                except (aiohttp.ClientError, asyncio.TimeoutError) as error:
+                    errors.append(f"{model}: {error}")
+                    if attempt == 0:
+                        await asyncio.sleep(0.5)
+
+    raise RuntimeError("Gemini vaqtincha band. Qayta urinib ko'ring.")
 
 
 @router.message(GeminiState.chatting)
