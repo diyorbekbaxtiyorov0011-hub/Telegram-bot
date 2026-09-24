@@ -206,7 +206,7 @@ async def ask_gemini(history: list[dict[str, object]]) -> str:
     payload = {
         "contents": history[-6:],
         "generationConfig": {
-            "maxOutputTokens": 128,
+            "maxOutputTokens": 1024,
             "temperature": 0.4,
             "candidateCount": 1,
         },
@@ -234,14 +234,12 @@ async def ask_gemini(history: list[dict[str, object]]) -> str:
 
             error = response_data.get("error", {}).get("message", "Noma'lum xato")
             errors.append(f"{model}: {error}")
-            if response.status not in (429, 500, 502, 503, 504):
-                break
+            logger.warning("Gemini %s xato berdi (%s): %s", model, response.status, error)
         except (aiohttp.ClientError, asyncio.TimeoutError) as error:
             errors.append(f"{model}: {error}")
-            if model_index == len(GEMINI_FALLBACK_MODELS) - 1:
-                break
+            logger.warning("Gemini %s ulanib bo'lmadi: %s", model, error)
 
-    raise RuntimeError("Gemini vaqtincha band. Qayta urinib ko'ring.")
+    raise RuntimeError("Gemini hozircha band yoki API limiti tugagan. Qayta urinib ko'ring.")
 
 
 @router.message(GeminiState.chatting)
