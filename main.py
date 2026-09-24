@@ -35,6 +35,7 @@ GEMINI_FALLBACK_MODELS = tuple(
         ]
     )
 )
+gemini_session: aiohttp.ClientSession | None = None
 
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN .env faylida ko'rsatilmagan")
@@ -205,40 +206,40 @@ async def ask_gemini(history: list[dict[str, object]]) -> str:
     payload = {
         "contents": history[-6:],
         "generationConfig": {
-            "maxOutputTokens": 256,
+            "maxOutputTokens": 128,
             "temperature": 0.4,
             "candidateCount": 1,
         },
     }
-    timeout = aiohttp.ClientTimeout(total=15)
-    errors = []
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        for model in GEMINI_FALLBACK_MODELS:
-            url = (
-                "https://generativelanguage.googleapis.com/v1beta/models/"
-                f"{model}:generateContent?key={GEMINI_API_KEY}"
-            )
-            for attempt in range(2):
-                try:
-                    async with session.post(url, json=payload) as response:
-                        response_data = await response.json(content_type=None)
-                    if response.status == 200:
-                        try:
-                            return response_data["candidates"][0]["content"]["parts"][0]["text"]
-                        except (KeyError, IndexError, TypeError) as error:
-                            errors.append(f"{model}: javob formati xato ({error})")
-                            break
+    global gemini_session
+    if gemini_session is None or gemini_session.closed:
+        timeout = aiohttp.ClientTimeout(total=8, connect=2)
+        gemini_session = aiohttp.ClientSession(timeout=timeout)
 
-                    error = response_data.get("error", {}).get("message", "Noma'lum xato")
-                    errors.append(f"{model}: {error}")
-                    if response.status not in (429, 500, 502, 503, 504):
-                        break
-                    if attempt == 0:
-                        await asyncio.sleep(0.5)
-                except (aiohttp.ClientError, asyncio.TimeoutError) as error:
-                    errors.append(f"{model}: {error}")
-                    if attempt == 0:
-                        await asyncio.sleep(0.5)
+    errors = []
+    for model_index, model in enumerate(GEMINI_FALLBACK_MODELS):
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{model}:generateContent?key={GEMINI_API_KEY}"
+        )
+        try:
+            async with gemini_session.post(url, json=payload) as response:
+                response_data = await response.json(content_type=None)
+            if response.status == 200:
+                try:
+                    return response_data["candidates"][0]["content"]["parts"][0]["text"]
+                except (KeyError, IndexError, TypeError) as error:
+                    errors.append(f"{model}: javob formati xato ({error})")
+                    break
+
+            error = response_data.get("error", {}).get("message", "Noma'lum xato")
+            errors.append(f"{model}: {error}")
+            if response.status not in (429, 500, 502, 503, 504):
+                break
+        except (aiohttp.ClientError, asyncio.TimeoutError) as error:
+            errors.append(f"{model}: {error}")
+            if model_index == len(GEMINI_FALLBACK_MODELS) - 1:
+                break
 
     raise RuntimeError("Gemini vaqtincha band. Qayta urinib ko'ring.")
 
@@ -435,6 +436,8 @@ async def main() -> None:
     try:
         await dispatcher.start_polling(bot)
     finally:
+        if gemini_session is not None and not gemini_session.closed:
+            await gemini_session.close()
         await health_runner.cleanup()
         await bot.session.close()
 
