@@ -30,8 +30,8 @@ GEMINI_FALLBACK_MODELS = tuple(
     dict.fromkeys(
         [
             GEMINI_MODEL,
+            "gemini-3.5-flash",
             "gemini-3.5-flash-lite",
-            "gemini-2.5-flash",
         ]
     )
 )
